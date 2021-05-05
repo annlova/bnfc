@@ -7,6 +7,7 @@
 #include <iostream>
 #include <set>
 #include <sstream>
+#include <iomanip>
 
 struct Symbol {
     const int id;
@@ -18,6 +19,12 @@ struct Symbol {
         bool equal = id == other.id;
         assert(!equal || equal && terminal == other.terminal);
         return equal;
+    }
+
+    bool operator!=(const Symbol& other) const {
+        bool unequal = id != other.id;
+        assert(unequal || !unequal && terminal == other.terminal);
+        return unequal;
     }
 };
 
@@ -34,16 +41,48 @@ struct Rule {
 
     Rule(const int id, const Symbol& category, std::vector<Symbol> production)
             : id(id), category(category), production(std::move(production)) {}
+
+    bool isReduction(const Rule& rule, int index) {
+        if (production.size() == index) {
+            for (int i = 0; i < production.size(); i++) {
+                if (production[i] != rule.production[i]) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 };
+
+std::vector<Rule> rules;
+std::unordered_map<Symbol, std::vector<int>, SymbolHasher> ruleCategoryMap;
 
 struct Item {
     const Rule* rule;
     const int index;
     bool accept;
+    bool reduce;
+    int reduceRule;
 
-    Item(const Rule* rule, const int index) : rule(rule), index(index), accept(false) {
-        if(rule->production[index] == Symbol(0, false)) {
-            accept = true;
+    Item(const Rule* rule, const int index) : rule(rule), index(index), accept(false), reduce(false), reduceRule(0) {
+        if (index < rule->production.size()) {
+            if(rule->production[index] == Symbol(0, true)) {
+                accept = true;
+            }
+        }
+
+        for (int i = 0; i < rules.size(); i++) {
+            if(rules[i].isReduction(*rule, index)) {
+                if (reduce) {
+                    std::cout << "Error! Item can be reduced to multiple rules!" << std::endl;
+                    break;
+                }
+                reduce = true;
+                reduceRule = i;
+            }
         }
     }
 
@@ -62,7 +101,8 @@ enum Action {
     REDUCE,
     SHIFT,
     ACCEPT,
-    GOTO
+    GOTO,
+    NA
 };
 struct State {
     const int id;
@@ -86,13 +126,10 @@ struct StateHasher {
     }
 };
 
-std::vector<Rule> rules;
-std::unordered_map<Symbol, std::vector<int>, SymbolHasher> ruleCategoryMap;
 std::unordered_set<State, StateHasher> states;
 std::vector<const State*> statesList;
 std::vector<std::vector<std::pair<Action, int>>> table;
 constexpr int numsymbols = 8;
-
 
 void closure(State& state) {
     bool itemsAdded = false;
@@ -160,6 +197,9 @@ void createNextStates(const State& state) {
     std::unordered_map<Symbol, std::vector<Item>, SymbolHasher> itemsCategoryMap;
     for (auto& item: state.items) {
         if (item.index < item.rule->production.size()) {
+            if (item.rule->production[item.index] == Symbol(0, true)) {
+                continue;
+            }
             itemsCategoryMap[item.rule->production[item.index]].emplace_back(item.rule, item.index + 1);
         }
     }
@@ -168,10 +208,16 @@ void createNextStates(const State& state) {
         State s(table.size());
 
         bool accept = false;
+        bool reduce = false;
+        int reduceRule = 0;
         for (auto& item : items.second) {
             s.items.insert(item);
             if (item.accept) {
                 accept = true;
+            }
+            if (item.reduce) {
+                reduce = true;
+                reduceRule = item.reduceRule;
             }
         }
 
@@ -190,6 +236,16 @@ void createNextStates(const State& state) {
 
         auto inserted = states.insert(std::move(s));
 
+        {
+            auto& associatedRow = table[state.id];
+            auto& sym = items.first;
+            if (sym.terminal) {
+                associatedRow[sym.id] = std::pair<Action, int>(Action::SHIFT, inserted.first->id);
+            } else {
+                associatedRow[sym.id] = std::pair<Action, int>(Action::GOTO, inserted.first->id);
+            }
+        }
+
         if (inserted.second) {
             std::cout << ss.str();
             statesList.push_back(&(*inserted.first));
@@ -197,8 +253,21 @@ void createNextStates(const State& state) {
             table.emplace_back(numsymbols);
 
             auto& row = table[table.size() - 1];
+            for (auto& e: row) {
+                e = std::pair<Action, int>(Action::NA, -1);
+            }
+
             if (accept) {
                 row[0] = std::pair<Action, int>(Action::ACCEPT, 0); // EOF column
+            }
+
+            if (reduce) {
+                for (int i = 1; i < row.size(); i++) {
+                    if (row[i].first != Action::GOTO) {
+                        row[i].first = Action::REDUCE;
+                        row[i].second = reduceRule;
+                    }
+                }
             }
 
             createNextStates(*inserted.first);
@@ -244,6 +313,11 @@ void test() {
     State state(0);
     state.items.insert(startRuleItem);
 
+    table.emplace_back(numsymbols);
+    for (auto& e: table[0]) {
+        e = std::pair<Action, int>(Action::NA, -1);
+    }
+
     std::stringstream ss;
     ss << "Before closure:" << std::endl;
     for (auto& item: state.items) {
@@ -263,6 +337,83 @@ void test() {
     createNextStates(*inserted.first);
 
     std::cout << std::endl << "Done! " << states.size() << " rules created." << std::endl;
+
+    std::cout << std::left;
+    for(auto& row: table) {
+        for (auto& e: row) {
+            switch (e.first) {
+                case REDUCE:
+                    std::cout << "r" << std::setw(2) << e.second << " ";
+                    break;
+                case SHIFT:
+                    std::cout << "s" << std::setw(2) << e.second << " ";
+                    break;
+                case ACCEPT:
+                    std::cout << "acc ";
+                    break;
+                case GOTO:
+                    std::cout << "g" << std::setw(2) << e.second << " ";
+                    break;
+                case NA:
+                    std::cout << "... ";
+                    break;
+            }
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::right;
+
+    std::vector<Symbol> tokens;
+    std::vector<int> stack;
+    stack.push_back(0);
+
+    std::string syntax = "$ 1 + 1";
+    std::stringstream file(syntax);
+    std::string token;
+    while (file >> token) {
+        if (token == "1") {
+            tokens.push_back(ONE);
+        } else if (token == "+") {
+            tokens.push_back(ADD);
+        } else if (token == "$") {
+            tokens.push_back(END);
+        }
+    }
+
+    std::vector<Symbol> out;
+
+    bool accepted = false;
+    while (!accepted) {
+        auto& curr = tokens.back();
+        auto& act = table[stack.back()][curr.id];
+        switch (act.first) {
+            case REDUCE:
+                for (int i = 0; i < rules[act.second].production.size(); i++) {
+                    stack.pop_back();
+                }
+                stack.push_back(table[stack.back()][rules[act.second].category.id].second);
+                out.push_back(rules[act.second].category);
+                break;
+            case SHIFT:
+                tokens.pop_back();
+                stack.push_back(act.second);
+                break;
+            case ACCEPT:
+                accepted = true;
+                break;
+            case GOTO:
+                std::cout << "err (goto)\n";
+                break;
+            case NA:
+                std::cout << "err (na)\n";
+                break;
+        }
+    }
+
+    std::cout << std::endl;
+    for (auto& e: out) {
+        std::cout << e.id << " ";
+    }
 }
 
 int main(const int argCount, const char* argVector[]) {
