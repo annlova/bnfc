@@ -12,8 +12,9 @@
 struct Symbol {
     const int id;
     const bool terminal;
+    const std::string sym;
 
-    Symbol(const int id, const bool terminal) : id(id), terminal(terminal) {}
+    Symbol(const int id, const bool terminal, std::string sym) : id(id), terminal(terminal), sym(std::move(sym)) {}
 
     bool operator==(const Symbol& other) const {
         bool equal = id == other.id;
@@ -39,8 +40,8 @@ struct Rule {
     const Symbol category;
     const std::vector<Symbol> production;
 
-    Rule(const int id, const Symbol& category, std::vector<Symbol> production)
-            : id(id), category(category), production(std::move(production)) {}
+    Rule(const int id, Symbol category, std::vector<Symbol> production)
+            : id(id), category(std::move(category)), production(std::move(production)) {}
 
     bool isReduction(const Rule& rule, int index) {
         if (production.size() == index) {
@@ -66,10 +67,12 @@ struct Item {
     bool accept;
     bool reduce;
     int reduceRule;
+    const Symbol lookahead;
 
-    Item(const Rule* rule, const int index) : rule(rule), index(index), accept(false), reduce(false), reduceRule(0) {
+    Item(const Rule* rule, const int index, Symbol  lookahead) : rule(rule), index(index), accept(false), reduce(false), reduceRule(0),
+                                                                      lookahead(std::move(lookahead)) {
         if (index < rule->production.size()) {
-            if(rule->production[index] == Symbol(0, true)) {
+            if(rule->production[index] == Symbol(0, true, "$")) {
                 accept = true;
             }
         }
@@ -87,13 +90,14 @@ struct Item {
     }
 
     bool operator==(const Item& other) const {
-        return index == other.index && rule == other.rule;
+        return index == other.index && rule == other.rule && lookahead == other.lookahead;
     }
 };
 
 struct ItemHasher {
     std::size_t operator()(const Item& i) const {
-        return 51 + 51 * std::hash<int>()(i.index) + std::hash<const Rule*>()(i.rule);
+        SymbolHasher hasher;
+        return 51 + 51 * std::hash<int>()(i.index) + 13 * hasher(i.lookahead) + std::hash<const Rule*>()(i.rule);
     }
 };
 
@@ -129,7 +133,7 @@ struct StateHasher {
 std::unordered_set<State, StateHasher> states;
 std::vector<const State*> statesList;
 std::vector<std::vector<std::pair<Action, int>>> table;
-constexpr int numsymbols = 8;
+constexpr int numsymbols = 6;
 
 void closure(State& state) {
     bool itemsAdded = false;
@@ -140,13 +144,45 @@ void closure(State& state) {
         } else if (!item.rule->production[item.index].terminal) {
             // Next symbol is non-terminal - add new items to the new state
             // for each rule the non-terminal is the category for
+            std::vector<const Symbol*> lookaheads;
+            if (item.index + 1 == item.rule->production.size()) {
+                lookaheads.push_back(&item.lookahead);
+            } else {
+                 auto lookahead = &item.rule->production[item.index + 1];
+                 if (lookahead->terminal) {
+                     lookaheads.push_back(lookahead);
+                 } else {
+                     std::vector<int> search;
+                     std::unordered_set<int> searchSet;
+                     for (auto e: ruleCategoryMap[*lookahead]) {
+                         search.push_back(e);
+                         searchSet.insert(e);
+                     }
+                     for (int i = 0; i < search.size(); i++) {
+                         auto* sym = &rules[i].production[0];
+                         if (sym->terminal) {
+                             lookaheads.push_back(sym);
+                         } else {
+                             for (auto e: ruleCategoryMap[*sym]) {
+                                 auto inserted = searchSet.insert(e);
+                                 if (inserted.second) {
+                                     search.push_back(e);
+                                 }
+                             }
+                         }
+                     }
+                 }
+            }
+
             auto categoryRules = ruleCategoryMap[item.rule->production[item.index]];
             for (auto ruleIndex: categoryRules) {
-                auto err = state.items.emplace(&rules[ruleIndex], 0);
-                if (err.second) {
-                    // New rule item added - keep track
-                    itemsAdded = true;
-                    // TODO: Fix inefficiency
+                for (auto lookahead: lookaheads) {
+                    auto inserted = state.items.emplace(&rules[ruleIndex], 0, *lookahead);
+                    if (inserted.second) {
+                        // New rule item added - keep track
+                        itemsAdded = true;
+                        // TODO: Fix inefficiency
+                    }
                 }
             }
         }
@@ -157,35 +193,23 @@ void closure(State& state) {
     }
 }
 
-void writeRuleItem(int id, int index, std::stringstream& ss) {
-    std::stringstream sst;
-    switch (id) {
-        case 0:
-            sst << "S -> E $";
-            break;
-        case 1:
-            sst << "E -> E * B";
-            break;
-        case 2:
-            sst << "E -> E + B";
-            break;
-        case 3:
-            sst << "E -> B";
-            break;
-        case 4:
-            sst << "B -> 0";
-            break;
-        case 5:
-            sst << "B -> 1";
-            break;
-        default:;
-    };
+void writeRuleItem(Item item, std::stringstream& ss) {
+    int id = item.rule->id;
+    int index = item.index;
+    auto lookahead = item.lookahead;
 
+    std::stringstream sst;
+    sst << item.rule->category.sym << " -> ";
+    for (auto& e: item.rule->production) {
+        sst << e.sym << " ";
+    }
+
+    sst << ", " << lookahead.sym;
 
     auto offset = 4 + index * 2;
     std::stringstream temp;
     temp << sst.str().substr(0, offset);
-    temp << " ¤ ";
+    temp << " .";
     if (offset < sst.str().length()) {
         temp << sst.str().substr(offset + 1);
     }
@@ -197,10 +221,10 @@ void createNextStates(const State& state) {
     std::unordered_map<Symbol, std::vector<Item>, SymbolHasher> itemsCategoryMap;
     for (auto& item: state.items) {
         if (item.index < item.rule->production.size()) {
-            if (item.rule->production[item.index] == Symbol(0, true)) {
+            if (item.rule->production[item.index] == Symbol(0, true, "$")) {
                 continue;
             }
-            itemsCategoryMap[item.rule->production[item.index]].emplace_back(item.rule, item.index + 1);
+            itemsCategoryMap[item.rule->production[item.index]].emplace_back(item.rule, item.index + 1, item.lookahead);
         }
     }
 
@@ -224,14 +248,14 @@ void createNextStates(const State& state) {
         std::stringstream ss;
         ss << std::endl << "Before closure:" << std::endl;
         for (auto& item: s.items) {
-            writeRuleItem(item.rule->id, item.index, ss);
+            writeRuleItem(item, ss);
         }
 
         closure(s);
 
         ss << "After closure:" << std::endl;
         for (auto& item: s.items) {
-            writeRuleItem(item.rule->id, item.index, ss);
+            writeRuleItem(item, ss);
         }
 
         auto inserted = states.insert(std::move(s));
@@ -257,17 +281,17 @@ void createNextStates(const State& state) {
                 e = std::pair<Action, int>(Action::NA, -1);
             }
 
-            if (accept) {
-                row[0] = std::pair<Action, int>(Action::ACCEPT, 0); // EOF column
-            }
-
             if (reduce) {
-                for (int i = 1; i < row.size(); i++) {
-                    if (row[i].first != Action::GOTO) {
-                        row[i].first = Action::REDUCE;
-                        row[i].second = reduceRule;
+                for (auto& i : row) {
+                    if (i.first != Action::GOTO) {
+                        i.first = Action::REDUCE;
+                        i.second = reduceRule;
                     }
                 }
+            }
+
+            if (accept) {
+                row[0] = std::pair<Action, int>(Action::ACCEPT, 0); // EOF column
             }
 
             createNextStates(*inserted.first);
@@ -286,30 +310,47 @@ void createNextStates(const State& state) {
  * 7 - eof
  */
 void test() {
-    Symbol END(0, true);
-    Symbol S(1, false);
-    Symbol E(2, false);
-    Symbol B(3, false);
-    Symbol NIL(4, true);
-    Symbol ONE(5, true);
-    Symbol ADD(6, true);
-    Symbol MUL(7, true);
+//    Symbol END(0, true, "$");
+//    Symbol S(1, false, "S");
+//    Symbol E(2, false, "E");
+//    Symbol B(3, false, "B");
+//    Symbol NIL(4, true, "0");
+//    Symbol ONE(5, true, "1");
+//    Symbol ADD(6, true, "+");
+//    Symbol MUL(7, true, "*");
 
-    rules.emplace_back(0, S, std::initializer_list<Symbol>{E, END});
-    rules.emplace_back(1, E, std::initializer_list<Symbol>{E, MUL, B});
-    rules.emplace_back(2, E, std::initializer_list<Symbol>{E, ADD, B});
-    rules.emplace_back(3, E, std::initializer_list<Symbol>{B});
-    rules.emplace_back(4, B, std::initializer_list<Symbol>{NIL});
-    rules.emplace_back(5, B, std::initializer_list<Symbol>{ONE});
+    Symbol END(0, true, "$");
+    Symbol S(4, false, "S");
+    Symbol C(5, false, "C");
+    Symbol c(1, true, "c");
+    Symbol d(2, true, "d");
+    Symbol SPRIME(3, false, "S'");
+
+//    rules.emplace_back(0, S, std::initializer_list<Symbol>{E, END});
+//    rules.emplace_back(1, E, std::initializer_list<Symbol>{E, MUL, B});
+//    rules.emplace_back(2, E, std::initializer_list<Symbol>{E, ADD, B});
+//    rules.emplace_back(3, E, std::initializer_list<Symbol>{B});
+//    rules.emplace_back(4, B, std::initializer_list<Symbol>{NIL});
+//    rules.emplace_back(5, B, std::initializer_list<Symbol>{ONE});
+
+    rules.emplace_back(0, SPRIME, std::initializer_list<Symbol>{S, END});
+    rules.emplace_back(1, S, std::initializer_list<Symbol>{C, C});
+    rules.emplace_back(2, C, std::initializer_list<Symbol>{c, C});
+    rules.emplace_back(3, C, std::initializer_list<Symbol>{d});
+
+//    ruleCategoryMap[S].push_back(0);
+//    ruleCategoryMap[E].push_back(1);
+//    ruleCategoryMap[E].push_back(2);
+//    ruleCategoryMap[E].push_back(3);
+//    ruleCategoryMap[B].push_back(4);
+//    ruleCategoryMap[B].push_back(5);
 
     ruleCategoryMap[S].push_back(0);
-    ruleCategoryMap[E].push_back(1);
-    ruleCategoryMap[E].push_back(2);
-    ruleCategoryMap[E].push_back(3);
-    ruleCategoryMap[B].push_back(4);
-    ruleCategoryMap[B].push_back(5);
+    ruleCategoryMap[S].push_back(1);
+    ruleCategoryMap[C].push_back(2);
+    ruleCategoryMap[C].push_back(3);
 
-    Item startRuleItem(&rules[0], 0);
+    Item startRuleItem(&rules[0], 0, END);
     State state(0);
     state.items.insert(startRuleItem);
 
@@ -321,14 +362,14 @@ void test() {
     std::stringstream ss;
     ss << "Before closure:" << std::endl;
     for (auto& item: state.items) {
-        writeRuleItem(item.rule->id, item.index, ss);
+        writeRuleItem(item, ss);
     }
 
     closure(state);
 
     ss << "After closure:" << std::endl;
     for (auto& item: state.items) {
-        writeRuleItem(item.rule->id, item.index, ss);
+        writeRuleItem(item, ss);
     }
 
     std::cout << ss.str();
@@ -338,8 +379,11 @@ void test() {
 
     std::cout << std::endl << "Done! " << states.size() << " rules created." << std::endl;
 
+    std::cout << std::endl << "   $   c   d   S'  S   C" << std::endl;
     std::cout << std::left;
+    int rc = 0;
     for(auto& row: table) {
+        std::cout << std::setw(2) << rc++ << " ";
         for (auto& e: row) {
             switch (e.first) {
                 case REDUCE:
@@ -363,24 +407,34 @@ void test() {
     }
     std::cout << std::right;
 
+    int count = 0;
+    for (auto& r: rules) {
+        std::cout << count++ << ") ";
+        std::cout << r.category.sym << " -> ";
+        for (auto& p: r.production) {
+            std::cout << p.sym << " ";
+        }
+        std::cout << std::endl;
+    }
+
     std::vector<Symbol> tokens;
     std::vector<int> stack;
     stack.push_back(0);
 
-    std::string syntax = "$ 1 + 1";
+    std::string syntax = "$ d d c";
     std::stringstream file(syntax);
     std::string token;
     while (file >> token) {
-        if (token == "1") {
-            tokens.push_back(ONE);
-        } else if (token == "+") {
-            tokens.push_back(ADD);
+        if (token == "c") {
+            tokens.push_back(c);
+        } else if (token == "d") {
+            tokens.push_back(d);
         } else if (token == "$") {
             tokens.push_back(END);
         }
     }
 
-    std::vector<Symbol> out;
+    std::vector<int> out;
 
     bool accepted = false;
     while (!accepted) {
@@ -392,7 +446,7 @@ void test() {
                     stack.pop_back();
                 }
                 stack.push_back(table[stack.back()][rules[act.second].category.id].second);
-                out.push_back(rules[act.second].category);
+                out.push_back(act.second);
                 break;
             case SHIFT:
                 tokens.pop_back();
@@ -412,7 +466,7 @@ void test() {
 
     std::cout << std::endl;
     for (auto& e: out) {
-        std::cout << e.id << " ";
+        std::cout << e << " ";
     }
 }
 
