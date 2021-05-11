@@ -1,4 +1,9 @@
 
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+
+#include "parser/h/State.h"
+
 #include <utility>
 #include <vector>
 #include <unordered_set>
@@ -108,6 +113,7 @@ enum Action {
     GOTO,
     NA
 };
+
 struct State {
     const int id;
     std::unordered_set<Item, ItemHasher> items{};
@@ -470,8 +476,48 @@ void test() {
     }
 }
 
+struct Del {
+    void operator()(GLFWwindow* window) {
+        std::cout << "Destroying window!" << std::endl;
+        glfwDestroyWindow(window);
+    }
+};
+
+void glfwErrorCallback(int code, const char* string) {
+    std::cout << "Error " << std::hex << code << ": " << string << std::endl;
+}
+
 int main(const int argCount, const char* argVector[]) {
+    glfwSetErrorCallback(glfwErrorCallback);
+
+    glfwInit();
+
+    std::unique_ptr<GLFWwindow, Del> window(glfwCreateWindow(480, 480, "", nullptr, nullptr));
+    if (!window) {
+        std::cout << "Failed to create GLFW window!" << std::endl;
+        return -1;
+    }
+
+    glfwMakeContextCurrent(window.get());
+
+    auto gladLoaderLoadSuccessful = gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress));
+    if (!gladLoaderLoadSuccessful) {
+        std::cout << "Failed to initialize OpenGL context." << std::endl;
+        return -1;
+    }
+
+    glViewport(0, 0, 480, 480);
+
     test();
+
+    while (!glfwWindowShouldClose(window.get())) {
+        glfwPollEvents();
+
+        glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        glfwSwapBuffers(window.get());
+    }
     return 0;
 }
 
