@@ -1,0 +1,76 @@
+// Program --
+Pdefs.	Program ::= [Def] ;
+
+// COMMENTS --
+comment "//" ;
+comment "/*" "*/" ;
+comment "#" ;
+
+// ID --
+token Id (letter)(letter | digit | '_')* ;
+
+// Types --
+TVoid.	 	Type ::= "void" ;
+TInt.	 	Type ::= "int" ;
+TBool.		Type ::= "bool" ;
+TDouble. 	Type ::= "double" ;
+
+TType.		TypeD ::= Type ;
+
+// Expression --
+EId.		Exp6 ::= Id ;
+EInt.		Exp6 ::= Integer ;
+EDouble.	Exp6 ::= Double ;
+ETrue.		Exp6 ::= "true" ;
+EFalse.		Exp6 ::= "false" ;
+EFunc.		Exp6 ::= Id "(" [Arg] ")" ;
+EPostInc.	Exp6 ::= Id "++" ;
+EPostDec.	Exp6 ::= Id "--" ;
+EPreInc.	Exp6 ::= "++" Id;
+EPreDec.	Exp6 ::= "--" Id ;
+EMul.		Exp5 ::= Exp5 "*" Exp6 ;
+EDiv.		Exp5 ::= Exp5 "/" Exp6 ;
+EAdd.		Exp4 ::= Exp4 "+" Exp5 ;
+ESub.		Exp4 ::= Exp4 "-" Exp5 ;
+ELth.		Exp3 ::= Exp4 "<" Exp4 ;
+EGth.		Exp3 ::= Exp4 ">" Exp4 ;
+EGeq.		Exp3 ::= Exp4 ">=" Exp4 ;
+ELeq.		Exp3 ::= Exp4 "<=" Exp4 ;
+EEql.		Exp3 ::= Exp4 "==" Exp4 ;
+ENeq.		Exp3 ::= Exp4 "!=" Exp4 ;
+EAnd.		Exp2 ::= Exp2 "&&" Exp3 ;
+EOr.		Exp1 ::= Exp1 "||" Exp2 ;
+EAss.		Exp ::= Id "=" Exp ;
+
+coercions Exp6 ;
+
+// Argument --
+AExp.		Arg ::= Exp ;
+
+separator Arg "," ;
+
+// Statement --
+SAssignment.	StmA ::= Id "=" Exp;
+SDec.		StmA ::= Id ;
+SDecInit.	Stm ::= TypeD [StmA] ";" ;
+SExp.		Stm ::= Exp ";" ;
+SReturn.	Stm ::= "return" Exp ";" ;
+SReturnEmp.	Stm ::= "return" ";" ;
+SBlock.		Stm ::= "{" [Stm] "}" ;
+SWhile.		Stm ::= "while" "(" Exp ")" Stm ;
+SIfElse.	Stm ::= "if" "(" Exp ")" Stm "else" Stm ;
+//SEmpty.		Stm ::= ";" ;
+
+separator nonempty StmA "," ;
+terminator  Stm "" ;
+
+// Parameter --
+PDecNoId.	Par ::= TypeD ;
+PDec.		Par ::= TypeD Id ;
+
+separator 	Par "," ;
+
+// Definitions --
+DFunc.	Def ::= TypeD Id "(" [Par] ")" "{" [Stm] "}" ;
+
+separator Def "" ;

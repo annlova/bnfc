@@ -1,0 +1,133 @@
+0Ident ^[[:upper:]]\w*[^\w] ^[[:upper:]](\w*([^\w])?)? 
+0String ^"([^\\"]|\\.)*"(.|\n|\r) ^"([^\\"]|\\.)*("((.|\n|\r))?)? 
+0Char ^'([^\\]|\\.)'(.|\n|\r) ^'(([^\\]|\\.)('((.|\n|\r))?)?)? 
+0Integer ^\d+[^\w] ^\d+[^\w]? 
+0char ^char[^\w] ^c(h(a(r([^\w])?)?)?)? 
+0coercions ^coercions[^\w] ^c(o(e(r(c(i(o(n(s([^\w])?)?)?)?)?)?)?)?)? 
+0comment ^comment[^\w] ^c(o(m(m(e(n(t([^\w])?)?)?)?)?)?)? 
+0digit ^digit[^\w] ^d(i(g(i(t([^\w])?)?)?)?)? 
+0entrypoints ^entrypoints[^\w] ^e(n(t(r(y(p(o(i(n(t(s([^\w])?)?)?)?)?)?)?)?)?)?)? 
+0eps ^eps[^\w] ^e(p(s([^\w])?)?)? 
+0internal ^internal[^\w] ^i(n(t(e(r(n(a(l([^\w])?)?)?)?)?)?)?)? 
+0layout ^layout[^\w] ^l(a(y(o(u(t([^\w])?)?)?)?)?)? 
+0letter ^letter[^\w] ^l(e(t(t(e(r([^\w])?)?)?)?)?)? 
+0lower ^lower[^\w] ^l(o(w(e(r([^\w])?)?)?)?)? 
+0nonempty ^nonempty[^\w] ^n(o(n(e(m(p(t(y([^\w])?)?)?)?)?)?)?)? 
+0position ^position[^\w] ^p(o(s(i(t(i(o(n([^\w])?)?)?)?)?)?)?)? 
+0rules ^rules[^\w] ^r(u(l(e(s([^\w])?)?)?)?)? 
+0separator ^separator[^\w] ^s(e(p(a(r(a(t(o(r([^\w])?)?)?)?)?)?)?)?)? 
+0stop ^stop[^\w] ^s(t(o(p([^\w])?)?)?)? 
+0terminator ^terminator[^\w] ^t(e(r(m(i(n(a(t(o(r([^\w])?)?)?)?)?)?)?)?)?)? 
+0token ^token[^\w] ^t(o(k(e(n([^\w])?)?)?)?)? 
+0toplevel ^toplevel[^\w] ^t(o(p(l(e(v(e(l([^\w])?)?)?)?)?)?)?)? 
+0upper ^upper[^\w] ^u(p(p(e(r([^\w])?)?)?)?)? 
+0; ^;(.|\n|\r) ^;(.|\n|\r)? 
+0. ^\.(.|\n|\r) ^\.(.|\n|\r)? 
+0::= ^::=(.|\n|\r) ^:(:(=(.|\n|\r)?)?)? 
+0[ ^\[(.|\n|\r) ^\[(.|\n|\r)? 
+0] ^\](.|\n|\r) ^\](.|\n|\r)? 
+0_ ^_(.|\n|\r) ^_(.|\n|\r)? 
+0( ^\((.|\n|\r) ^\((.|\n|\r)? 
+0: ^:(.|\n|\r) ^:(.|\n|\r)? 
+0) ^\)(.|\n|\r) ^\)(.|\n|\r)? 
+0, ^,(.|\n|\r) ^,(.|\n|\r)? 
+0| ^\|(.|\n|\r) ^\|(.|\n|\r)? 
+0- ^-(.|\n|\r) ^-(.|\n|\r)? 
+0* ^\*(.|\n|\r) ^\*(.|\n|\r)? 
+0+ ^\+(.|\n|\r) ^\+(.|\n|\r)? 
+0? ^\?(.|\n|\r) ^\?(.|\n|\r)? 
+0{ ^\{(.|\n|\r) ^\{(.|\n|\r)? 
+0} ^\}(.|\n|\r) ^\}(.|\n|\r)? 
+0LineComment ^//.*(\n|\r) ^/(/(.*(\n|\r)?)?)? 
+0BlockComment ^/\*(.|\r|\n)*\*/(.|\n|\r) ^/(\*((.|\r|\n)*(\*(/((.|\n|\r))?)?)?)?)?
+# Grammar
+# ListDef
+# ListItem
+# Def
+# Item
+# Cat
+# Label
+# LabelId
+# ProfItem
+# IntList
+# ListInteger
+# ListIntList
+# ListProfItem
+# ListString
+# ListRHS
+# RHS
+# MinimumSize
+# RegA
+# RegB
+# RegC
+# RegD
+# ListIdent
+Grammar 0 ListDef 1 pointer 2
+ListDef 0 - 1 void 2
+ListDef 1 Def 0; ListDef 1 pointer void pointer 2
+ListItem 0 - 1 void 2
+ListItem 1 Item ListItem 1 pointer pointer 2
+Def 0 Label 0. Cat 0::= ListItem 1 pointer void pointer void pointer 2
+Def 1 0comment 0String 1 void pointer 2
+Def 2 0comment 0String 0String 1 void pointer pointer 2
+Def 3 0internal Label 0. Cat 0::= ListItem 1 void pointer void pointer void pointer 2
+Def 4 0token 0Ident Reg 1 void pointer pointer 2
+Def 5 0position 0token 0Ident Reg 1 void void pointer pointer 2
+Def 6 0entrypoints ListIdent 1 void pointer 2
+Def 7 0separator MinimumSize Cat 0String 1 void pointer pointer pointer 2
+Def 8 0terminator MinimumSize Cat 0String 1 void pointer pointer pointer 2
+Def 9 0coercions 0Ident 0Integer 1 void pointer int 2
+Def 10 0rules 0Ident 0::= ListRHS 1 void pointer void pointer 2
+Def 11 0layout ListString 1 void pointer 2
+Def 12 0layout 0stop ListString 1 void void pointer 2
+Def 13 0layout 0toplevel 1 void void 2
+Item 0 0String 1 pointer 2
+Item 1 Cat 1 pointer 2
+Cat 0 0[ Cat 0] 1 void pointer void 2
+Cat 1 0Ident 1 pointer 2
+Label 0 LabelId 1 pointer 2
+Label 1 LabelId ListProfItem 1 pointer pointer 2
+Label 2 LabelId LabelId ListProfItem 1 pointer pointer pointer 2
+LabelId 0 0Ident 1 pointer 2
+LabelId 1 0_ 1 void 2
+LabelId 2 0[ 0] 1 void void 2
+LabelId 3 0( 0: 0) 1 void void void 2
+LabelId 4 0( 0: 0[ 0] 0) 1 void void void void 2
+ProfItem 0 0( 0[ ListIntList 0] 0, 0[ ListInteger 0] 0) 1 void void pointer void void void pointer void void 2
+IntList 0 0[ ListInteger 0] 1 void pointer void 2
+ListInteger 0 - 1 void 2
+ListInteger 1 0Integer 1 int 2
+ListInteger 2 0Integer 0, ListInteger 1 int void pointer 2
+ListIntList 0 - 1 void 2
+ListIntList 1 IntList 1 pointer 2
+ListIntList 2 IntList 0, ListIntList 1 pointer void pointer 2
+ListProfItem 0 ProfItem 1 pointer 2
+ListProfItem 1 ProfItem ListProfItem 1 pointer pointer 2
+ListString 0 0String 1 pointer 2
+ListString 1 0String 0, ListString 1 pointer void pointer 2
+ListRHS 0 RHS 1 pointer 2
+ListRHS 1 RHS 0| ListRHS 1 pointer void pointer 2
+RHS 0 ListItem 1 pointer 2
+MinimumSize 0 0nonempty 1 void 2
+MinimumSize 1 - 1 void 2
+RegA 0 RegB 1 pointer 2
+RegB 0 RegB 0| RegC 1 pointer void pointer 2
+RegB 1 RegC 0- RegC 1 pointer void pointer 2
+RegB 2 RegC 1 pointer 2
+RegC 0 RegC RegD 1 pointer pointer 2
+RegC 1 RegD 1 pointer 2
+RegD 0 RegD 0* 1 pointer void 2
+RegD 1 RegD 0+ 1 pointer void 2
+RegD 2 RegD 0? 1 pointer void 2
+RegD 3 0eps 1 void 2
+RegD 4 0Char 1 char 2
+RegD 5 0[ 0String 0] 1 void pointer void 2
+RegD 6 0{ 0String 0} 1 void pointer void 2
+RegD 7 0digit 1 void 2
+RegD 8 0letter 1 void 2
+RegD 9 0upper 1 void 2
+RegD 10 0lower 1 void 2
+RegD 11 0char 1 void 2
+RegD 12 0( RegA 0) 1 void pointer void 2
+ListIdent 0 0Ident 1 pointer 2
+ListIdent 1 0Ident 0, ListIdent 1 pointer void pointer 2
