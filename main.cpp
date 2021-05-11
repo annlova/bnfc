@@ -490,7 +490,13 @@ void glfwErrorCallback(int code, const char* string) {
 int main(const int argCount, const char* argVector[]) {
     glfwSetErrorCallback(glfwErrorCallback);
 
-    glfwInit();
+    auto glfwInitSuccessful = glfwInit();
+    if (!glfwInitSuccessful) {
+        std::cout << "Failed to initialize glfw." << std::endl;
+        return -1;
+    }
+
+    glfwWindowHint(GLFW_DOUBLEBUFFER, GLFW_TRUE);
 
     std::unique_ptr<GLFWwindow, Del> window(glfwCreateWindow(480, 480, "", nullptr, nullptr));
     if (!window) {
@@ -508,16 +514,24 @@ int main(const int argCount, const char* argVector[]) {
 
     glViewport(0, 0, 480, 480);
 
-    test();
+//    test();
 
+    bool other = false;
     while (!glfwWindowShouldClose(window.get())) {
         glfwPollEvents();
 
-        glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        if (other) {
+            glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
+        } else {
+            glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
+        }
         glClear(GL_COLOR_BUFFER_BIT);
+        other = !other;
 
         glfwSwapBuffers(window.get());
     }
+
+    glfwTerminate();
     return 0;
 }
 
